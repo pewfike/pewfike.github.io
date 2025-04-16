@@ -14,24 +14,44 @@ import pickle
 from dotenv import load_dotenv
 from datetime import datetime
 import logging
+import sys
 
-# Configure logging
-logging.basicConfig(level=logging.DEBUG)
+# Configure logging to write to a file
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('/home/pewfike/mysite/debug.log'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
+logger.debug("Environment variables loaded")
 
 app = Flask(__name__)
+
+# Log the GMAIL_ADDRESS (without showing the full address)
+gmail_address = os.getenv('GMAIL_ADDRESS')
+if gmail_address:
+    logger.debug(f"GMAIL_ADDRESS found: {gmail_address[:3]}...{gmail_address[-10:]}")
+else:
+    logger.error("GMAIL_ADDRESS not found in environment variables!")
 
 # Configure CORS
 CORS(app, resources={
     r"/api/*": {
-        "origins": ["https://pewfike.github.io", "http://localhost:5000", "http://127.0.0.1:5000"],
+        "origins": ["https://pewfike.github.io"],
         "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type"]
+        "allow_headers": ["Content-Type"],
+        "expose_headers": ["Content-Type"],
+        "supports_credentials": False,
+        "max_age": 3600
     }
 })
+logger.debug("CORS configured")
 
 # If modifying these scopes, delete the file token.pickle.
 SCOPES = ['https://www.googleapis.com/auth/gmail.send']
@@ -48,11 +68,16 @@ def get_gmail_service():
             logger.debug("Found token.pickle file")
             with open('token.pickle', 'rb') as token:
                 creds = pickle.load(token)
+                logger.debug("Successfully loaded credentials from token.pickle")
+        else:
+            logger.warning("token.pickle file not found")
         
         if not creds or not creds.valid:
-            logger.debug("Credentials not valid, refreshing...")
+            logger.debug("Credentials not valid, attempting refresh...")
             if creds and creds.expired and creds.refresh_token:
+                logger.debug("Refreshing expired credentials")
                 creds.refresh(Request())
+                logger.debug("Credentials refreshed successfully")
             else:
                 logger.debug("Getting new credentials from OAuth flow")
                 if not os.path.exists('credentials.json'):
@@ -62,14 +87,17 @@ def get_gmail_service():
                 flow = InstalledAppFlow.from_client_secrets_file(
                     'credentials.json', SCOPES)
                 creds = flow.run_local_server(port=0)
+                logger.debug("New credentials obtained from OAuth flow")
             
             with open('token.pickle', 'wb') as token:
                 pickle.dump(creds, token)
                 logger.debug("Saved new token.pickle")
 
-        return build('gmail', 'v1', credentials=creds)
+        service = build('gmail', 'v1', credentials=creds)
+        logger.debug("Gmail service built successfully")
+        return service
     except Exception as e:
-        logger.error(f"Error in get_gmail_service: {str(e)}")
+        logger.error(f"Error in get_gmail_service: {str(e)}", exc_info=True)
         raise
 
 def create_message(to, subject, message_text, html_content):
@@ -156,6 +184,7 @@ def create_html_message(name, email, message_text):
 
 @app.route('/api/test', methods=['GET'])
 def test_endpoint():
+    logger.debug("Test endpoint called")
     return jsonify({'status': 'ok', 'message': 'Backend is working!'}), 200
 
 @app.route('/api/send-email', methods=['POST'])
@@ -163,7 +192,7 @@ def send_email():
     try:
         logger.debug("Received email request")
         data = request.json
-        logger.debug(f"Request data: {data}")
+        logger.debug(f"Request data received: {data}")
 
         name = data.get('name')
         email = data.get('email')
@@ -200,15 +229,27 @@ def send_email():
         result = send_message(service, "me", email_message)
 
         if result:
-            logger.debug("Email sent successfully")
+            logger.debug(f"Email sent successfully. Message ID: {result.get('id', 'unknown')}")
             return jsonify({'message': 'Email sent successfully'}), 200
         else:
             logger.error("Failed to send email - no result returned")
             return jsonify({'error': 'Failed to send email'}), 500
 
     except Exception as e:
-        logger.error(f"Error in send_email: {str(e)}")
+        logger.error(f"Error in send_email: {str(e)}", exc_info=True)
         return jsonify({'error': f'Failed to send email: {str(e)}'}), 500
 
+# Add OPTIONS handler for CORS preflight requests
+@app.route('/api/send-email', methods=['OPTIONS'])
+def handle_options():
+    logger.debug("Handling OPTIONS request")
+    response = jsonify({'status': 'ok'})
+    response.headers['Access-Control-Allow-Origin'] = 'https://pewfike.github.io'
+    response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    response.headers['Access-Control-Max-Age'] = '3600'
+    return response, 200
+
 if __name__ == '__main__':
+    logger.debug("Starting Flask application...")
     app.run(debug=True, port=5000) 
