@@ -40,22 +40,29 @@ if gmail_address:
 else:
     logger.error("GMAIL_ADDRESS not found in environment variables!")
 
-# Configure CORS
-CORS(app)  # Enable CORS for all routes
+# Configure CORS with specific options
+CORS(app, resources={
+    r"/*": {
+        "origins": ["https://pewfike.github.io"],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type"],
+        "expose_headers": ["Content-Type"],
+        "supports_credentials": False,
+        "max_age": 3600
+    }
+})
 
 @app.after_request
 def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', 'https://pewfike.github.io')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-    return response
-
-@app.route('/api/send-email', methods=['OPTIONS'])
-def handle_preflight():
-    response = make_response()
-    response.headers.add('Access-Control-Allow-Origin', 'https://pewfike.github.io')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
-    response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+    if request.method == 'OPTIONS':
+        response = make_response()
+        response.status_code = 200
+    
+    # Explicitly set all CORS headers
+    response.headers['Access-Control-Allow-Origin'] = 'https://pewfike.github.io'
+    response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
+    response.headers['Access-Control-Max-Age'] = '3600'
     return response
 
 # If modifying these scopes, delete the file token.pickle.
