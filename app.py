@@ -13,63 +13,92 @@ import json
 import pickle
 from dotenv import load_dotenv
 from datetime import datetime
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all routes
+
+# Configure CORS
+CORS(app, resources={
+    r"/api/*": {
+        "origins": ["https://pewfike.github.io", "http://localhost:5000", "http://127.0.0.1:5000"],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type"]
+    }
+})
 
 # If modifying these scopes, delete the file token.pickle.
 SCOPES = ['https://www.googleapis.com/auth/gmail.send']
 
 # Email configuration
 SENDER_NAME = "Contact Form"
-SENDER_EMAIL = os.getenv('GMAIL_ADDRESS', 'your-email@gmail.com')
+SENDER_EMAIL = os.getenv('GMAIL_ADDRESS')
 FORMATTED_SENDER = formataddr((SENDER_NAME, SENDER_EMAIL))
 
 def get_gmail_service():
-    creds = None
-    if os.path.exists('token.pickle'):
-        with open('token.pickle', 'rb') as token:
-            creds = pickle.load(token)
-    
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                'credentials.json', SCOPES)
-            creds = flow.run_local_server(port=0)
+    try:
+        creds = None
+        if os.path.exists('token.pickle'):
+            logger.debug("Found token.pickle file")
+            with open('token.pickle', 'rb') as token:
+                creds = pickle.load(token)
         
-        with open('token.pickle', 'wb') as token:
-            pickle.dump(creds, token)
+        if not creds or not creds.valid:
+            logger.debug("Credentials not valid, refreshing...")
+            if creds and creds.expired and creds.refresh_token:
+                creds.refresh(Request())
+            else:
+                logger.debug("Getting new credentials from OAuth flow")
+                if not os.path.exists('credentials.json'):
+                    logger.error("credentials.json file not found!")
+                    raise FileNotFoundError("credentials.json is missing")
+                
+                flow = InstalledAppFlow.from_client_secrets_file(
+                    'credentials.json', SCOPES)
+                creds = flow.run_local_server(port=0)
+            
+            with open('token.pickle', 'wb') as token:
+                pickle.dump(creds, token)
+                logger.debug("Saved new token.pickle")
 
-    return build('gmail', 'v1', credentials=creds)
+        return build('gmail', 'v1', credentials=creds)
+    except Exception as e:
+        logger.error(f"Error in get_gmail_service: {str(e)}")
+        raise
 
 def create_message(to, subject, message_text, html_content):
-    message = MIMEMultipart('alternative')
-    message['to'] = to
-    message['from'] = FORMATTED_SENDER
-    message['subject'] = subject
+    try:
+        message = MIMEMultipart('alternative')
+        message['to'] = to
+        message['from'] = FORMATTED_SENDER
+        message['subject'] = subject
 
-    # Add plain text version
-    text_part = MIMEText(message_text, 'plain')
-    message.attach(text_part)
+        text_part = MIMEText(message_text, 'plain')
+        message.attach(text_part)
 
-    # Add HTML version
-    html_part = MIMEText(html_content, 'html')
-    message.attach(html_part)
+        html_part = MIMEText(html_content, 'html')
+        message.attach(html_part)
 
-    return {'raw': base64.urlsafe_b64encode(message.as_bytes()).decode()}
+        return {'raw': base64.urlsafe_b64encode(message.as_bytes()).decode()}
+    except Exception as e:
+        logger.error(f"Error in create_message: {str(e)}")
+        raise
 
 def send_message(service, user_id, message):
     try:
+        logger.debug("Attempting to send email...")
         message = service.users().messages().send(userId=user_id, body=message).execute()
+        logger.debug(f"Email sent successfully. Message ID: {message['id']}")
         return message
     except Exception as e:
-        print(f'An error occurred: {e}')
-        return None
+        logger.error(f"Error sending email: {str(e)}")
+        raise
 
 def create_plain_text_message(name, email, message_text):
     return f"""
@@ -125,18 +154,37 @@ def create_html_message(name, email, message_text):
     </html>
     """
 
+@app.route('/api/test', methods=['GET'])
+def test_endpoint():
+    return jsonify({'status': 'ok', 'message': 'Backend is working!'}), 200
+
 @app.route('/api/send-email', methods=['POST'])
 def send_email():
     try:
+        logger.debug("Received email request")
         data = request.json
+        logger.debug(f"Request data: {data}")
+
         name = data.get('name')
         email = data.get('email')
         message = data.get('message')
 
         if not all([name, email, message]):
+            logger.error("Missing required fields")
             return jsonify({'error': 'Missing required fields'}), 400
 
+        # Check if credentials.json exists
+        if not os.path.exists('credentials.json'):
+            logger.error("credentials.json not found")
+            return jsonify({'error': 'Server configuration error: credentials.json missing'}), 500
+
+        # Check if GMAIL_ADDRESS is set
+        if not SENDER_EMAIL:
+            logger.error("GMAIL_ADDRESS not set in environment variables")
+            return jsonify({'error': 'Server configuration error: GMAIL_ADDRESS not set'}), 500
+
         # Get Gmail service
+        logger.debug("Getting Gmail service...")
         service = get_gmail_service()
         
         # Create both plain text and HTML versions
@@ -145,17 +193,22 @@ def send_email():
         html_content = create_html_message(name, email, message)
 
         # Create and send the message
+        logger.debug("Creating email message...")
         email_message = create_message(SENDER_EMAIL, subject, plain_text, html_content)
+        
+        logger.debug("Sending email...")
         result = send_message(service, "me", email_message)
 
         if result:
+            logger.debug("Email sent successfully")
             return jsonify({'message': 'Email sent successfully'}), 200
         else:
+            logger.error("Failed to send email - no result returned")
             return jsonify({'error': 'Failed to send email'}), 500
 
     except Exception as e:
-        print(f'Error: {e}')
-        return jsonify({'error': 'Failed to send email'}), 500
+        logger.error(f"Error in send_email: {str(e)}")
+        return jsonify({'error': f'Failed to send email: {str(e)}'}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000) 
