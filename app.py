@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 from flask_cors import CORS
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -41,17 +41,22 @@ else:
     logger.error("GMAIL_ADDRESS not found in environment variables!")
 
 # Configure CORS
-CORS(app, resources={
-    r"/api/*": {
-        "origins": ["https://pewfike.github.io"],
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type"],
-        "expose_headers": ["Content-Type"],
-        "supports_credentials": False,
-        "max_age": 3600
-    }
-})
-logger.debug("CORS configured")
+CORS(app)  # Enable CORS for all routes
+
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', 'https://pewfike.github.io')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+    response.headers.add('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+    return response
+
+@app.route('/api/send-email', methods=['OPTIONS'])
+def handle_preflight():
+    response = make_response()
+    response.headers.add('Access-Control-Allow-Origin', 'https://pewfike.github.io')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type')
+    response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+    return response
 
 # If modifying these scopes, delete the file token.pickle.
 SCOPES = ['https://www.googleapis.com/auth/gmail.send']
@@ -238,17 +243,6 @@ def send_email():
     except Exception as e:
         logger.error(f"Error in send_email: {str(e)}", exc_info=True)
         return jsonify({'error': f'Failed to send email: {str(e)}'}), 500
-
-# Add OPTIONS handler for CORS preflight requests
-@app.route('/api/send-email', methods=['OPTIONS'])
-def handle_options():
-    logger.debug("Handling OPTIONS request")
-    response = jsonify({'status': 'ok'})
-    response.headers['Access-Control-Allow-Origin'] = 'https://pewfike.github.io'
-    response.headers['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type'
-    response.headers['Access-Control-Max-Age'] = '3600'
-    return response, 200
 
 if __name__ == '__main__':
     logger.debug("Starting Flask application...")
