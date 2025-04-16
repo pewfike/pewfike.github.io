@@ -12,6 +12,17 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     });
 });
 
+// API Configuration
+const API_URL = {
+    development: 'http://127.0.0.1:5000',
+    production: 'https://pewfike.pythonanywhere.com'
+};
+
+// Always use production URL when on GitHub Pages
+const BASE_URL = window.location.hostname.includes('github.io') 
+    ? API_URL.production 
+    : API_URL.development;
+
 // Contact form handling
 const contactForm = document.getElementById('contact-form');
 if (contactForm) {
@@ -26,7 +37,10 @@ if (contactForm) {
             const formData = new FormData(contactForm);
             const formProps = Object.fromEntries(formData);
             
-            const response = await fetch('http://127.0.0.1:5000/api/send-email', {
+            console.log('Sending request to:', `${BASE_URL}/api/send-email`);
+            console.log('Form data:', formProps);
+            
+            const response = await fetch(`${BASE_URL}/api/send-email`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -34,7 +48,9 @@ if (contactForm) {
                 body: JSON.stringify(formProps)
             });
 
+            console.log('Response status:', response.status);
             const result = await response.json();
+            console.log('Response data:', result);
             
             if (response.ok) {
                 alert('Thank you for your message! I will get back to you soon.');
@@ -43,8 +59,8 @@ if (contactForm) {
                 throw new Error(result.error || 'Failed to send message');
             }
         } catch (error) {
+            console.error('Detailed error:', error);
             alert('Sorry, there was an error sending your message. Please try again later.');
-            console.error('Error:', error);
         } finally {
             submitButton.disabled = false;
             submitButton.textContent = 'Send Message';
