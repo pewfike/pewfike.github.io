@@ -216,6 +216,47 @@ body {
     gap: 2rem;
 }
 
+/* Projects Grid */
+.projects-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+}
+
+.project-card {
+    background: white;
+    border-radius: 1rem;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    transition: transform 0.3s ease;
+}
+
+.project-card:hover {
+    transform: translateY(-5px);
+}
+
+/* If you add images back to projects:
+.project-card img {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+}
+*/
+
+.project-content {
+    padding: 1.5rem;
+}
+
+.project-content h3 {
+    margin-bottom: 0.5rem;
+    color: var(--text-color);
+}
+
+.project-content p {
+    margin-bottom: 1.5rem;
+    color: var(--light-text);
+}
+
 /* Contact Section */
 .contact-content {
     max-width: 600px;
