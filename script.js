@@ -12,62 +12,6 @@ document.querySelectorAll('a[href^="#"]').forEach(anchor => {
     });
 });
 
-// API Configuration
-const API_URL = {
-    development: 'http://127.0.0.1:5000',
-    production: 'https://pewfike.pythonanywhere.com'
-};
-
-// Always use production URL when on GitHub Pages
-const BASE_URL = window.location.hostname.includes('github.io') 
-    ? API_URL.production 
-    : API_URL.development;
-
-// Contact form handling
-const contactForm = document.getElementById('contact-form');
-if (contactForm) {
-    contactForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        
-        const submitButton = contactForm.querySelector('button[type="submit"]');
-        submitButton.disabled = true;
-        submitButton.textContent = 'Sending...';
-        
-        try {
-            const formData = new FormData(contactForm);
-            const formProps = Object.fromEntries(formData);
-            
-            console.log('Sending request to:', `${BASE_URL}/api/send-email`);
-            console.log('Form data:', formProps);
-            
-            const response = await fetch(`${BASE_URL}/api/send-email`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(formProps)
-            });
-
-            console.log('Response status:', response.status);
-            const result = await response.json();
-            console.log('Response data:', result);
-            
-            if (response.ok) {
-                alert('Thank you for your message! I will get back to you soon.');
-                contactForm.reset();
-            } else {
-                throw new Error(result.error || 'Failed to send message');
-            }
-        } catch (error) {
-            console.error('Detailed error:', error);
-            alert('Sorry, there was an error sending your message. Please try again later.');
-        } finally {
-            submitButton.disabled = false;
-            submitButton.textContent = 'Send Message';
-        }
-    });
-}
-
 // Sample blog posts data
 const blogPosts = [
     {
@@ -83,8 +27,7 @@ const blogPosts = [
         date: '2024-03-10',
         image: 'https://source.unsplash.com/random/800x600/?programming',
         link: '#'
-    },
-    // Add more blog posts as needed
+    }
 ];
 
 // Load blog posts
